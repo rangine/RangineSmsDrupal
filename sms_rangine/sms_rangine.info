@@ -1,0 +1,13 @@
+name = Rangine SMS Gateway
+description = Iranian Rangine Gateway: sms.rangine.ir - support:‌ rangine.ir - 09191483567
+package = SMS Framework
+core = 7.x
+version = "7.x-1.0"
+dependencies[] = sms
+files[] = sms_rangine.module
+; Information added by Drupal.org packaging script on 2017-06-14
+version = "7.x-1.0"
+core = "7.x"
+project = "sms_rangine"
+datestamp = "1497451144"
+

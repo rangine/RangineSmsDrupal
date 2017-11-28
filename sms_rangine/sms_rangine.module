@@ -1,0 +1,272 @@
+<?php
+/**
+ * Rangine SMS service gateway module for Drupal SMS Framework.
+ *
+ * Developer : Hadi Mollaei(mr.hadimollaei@gmail.com) - 09191483567 - rangine.ir
+ * Copyright: All rights reserved for Rangine.ir.
+ * Created: October 2015.
+ * 
+ * @file
+ * sms_rangine module.
+ *
+ */
+define('SMS_RANGINE_DEFAULT_IP', "37.130.202.188");
+
+function sms_rangine_gateway_info() {
+  return array(
+      'rangine' => array(
+          'name' => 'SMS Rangine',
+          'configure form' => 'sms_rangine_admin_form',
+          'send' => 'sms_rangine_send',
+          'send form' => 'sms_rangine_send_form',
+      ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function sms_rangine_menu() {
+
+  //SMS send form 
+  $items['admin/smsframework/sendsms'] = array(
+    'title' => 'Send a SMS',
+    'description' => 'Send SMS form.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('sms_rangine_sender_form', NULL),
+    'access arguments' => array('administer smsframework'),
+  );
+  return $items;
+}
+
+/**
+ * Gateway admin form to input rangine login credentitals
+ */
+function sms_rangine_admin_form($configuration) {
+
+  $form['sms_rangine_user'] = array(
+      '#type' => 'textfield',
+      '#title' => t('User Name'),
+      '#description' => t('Your user name in Rangine SMS Service.'),
+      '#default_value' => !empty($configuration['sms_rangine_user']) ? $configuration['sms_rangine_user'] : '',
+  );
+
+  $form['sms_rangine_password'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Password'),
+      '#description' => t('Your current password in Rangine SMS service. <b>Note:</b> Change it when you change your password in rangine SMS service'),
+      '#default_value' => !empty($configuration['sms_rangine_password']) ? $configuration['sms_rangine_password'] : '',
+  );
+
+  $form['sms_rangine_sender'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Sender'),
+      '#description' => t('Input one of your active SMS line number.'),
+      '#default_value' => !empty($configuration['sms_rangine_sender']) ? $configuration['sms_rangine_sender'] : '',
+  );
+  $form['sms_rangine_send_massage'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Confirm Message'),
+      '#size' => 100,
+      '#maxlength' => 250,
+      '#description' => t('This message will be shown after successful SMS sending. Use "{number}" for insert number in the message.'),
+      '#default_value' => !empty($configuration['sms_rangine_send_massage']) ? $configuration['sms_rangine_send_massage'] : 'A SMS has sent from site to {number} and will achieve to phone in 3 minute if ther is no problem in communication or the phone is not off.',
+  );
+  $form['sms_rangine_advanced_settings'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Advanced Settings'),
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+  );
+  $form['sms_rangine_advanced_settings']['sms_rangine_force_user_confirm'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Force users to confirm phone number'),
+      '#description' => t('If checked, new users and users widthout phone number redirect to phone number page settings after login. This needs User SMS module enabeled.'),
+      '#default_value' => !empty($configuration['sms_rangine_force_user_confirm']) ? $configuration['sms_rangine_force_user_confirm'] : 0,
+	  '#disabled' => module_exists('sms_user') ? false : true,
+  );
+  $form['sms_rangine_advanced_settings']['sms_rangine_debug'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Debug Mode'),
+      '#description' => t('If checked send nothing but show the message that will be send if this was unchecked!'),
+      '#default_value' => !empty($configuration['sms_rangine_debug']) ? $configuration['sms_rangine_debug'] : 0,
+  );
+
+  return $form;
+}
+
+
+function sms_rangine_admin_form_submit($form, &$form_state) {
+  $gateway = sms_gateways('gateway', 'rangine');
+  $config = $gateway['configuration'];
+  $carrier = $config['sms_rangine_disable_carrier'];
+  if($form['sms_rangine_disable_carrier'] !== $carrier){
+	  menu_reset_static_cache();
+  }
+}
+
+function sms_rangine_sender_form($form, &$form_state) {
+  // Message to the user about the form.
+  $form['about'] = array(
+    '#type' => 'item',
+    '#value' => 'This is a basic form that contains:<ul><li>include sms_send_form()</li><li>message text field</li><li>submit button</li></ul>The form validation includes sms_send_form_validate().<br/>The form submission includes sms_send_form_submit() which sends the message, and a little note that the form submitted ok.',
+  );
+
+  // Include the sms_send_form from the SMS Framework core.
+  $form = array_merge($form, sms_send_form(true));
+
+  // Message text field for the send form.
+  $form['message'] = array(
+    '#type' => 'textarea',
+    '#title' => t('Message'),
+    '#rows' => 4,
+    '#cols' => 40,
+    '#resizable' => FALSE,
+  );
+
+  // Submit button for the send form.
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => 'Send Message',
+    '#validate' => array('sms_send_form_validate'),
+    '#submit' => array('sms_send_form_submit'),
+  );
+
+  return $form;
+}
+
+/**
+ * Callback for sending messages.
+ */
+function sms_rangine_send($number, $message, $options) {
+	if(substr( $message, 0, 11 ) === "patterncode"){
+		$splited = explode(';',$message);
+		$patterncode = explode(':',$splited[0])[1];
+		unset($splited[0]);
+		$resArray = array();
+		foreach($splited as $parm){
+			$splited_parm = explode(':',$parm);
+			$resArray[$splited_parm[0]] = $splited_parm[1];
+		}
+		return sms_rangine_command('sendPatternSms', array(
+		      'number' => $number,
+			  'pattern_code' => $patterncode,
+			  'input_data' => $resArray,
+		  ));
+		
+	}
+  return sms_rangine_command('sendmsg', array(
+      'number' => $number,
+      'message' => $message,
+      'sender' => $options,//['sender'],
+  ));
+}
+
+/**
+ * Executes a command using the rangine API
+ */
+
+function sms_rangine_command($command = 'sendmsg', $data = array()) {
+  $gateway = sms_gateways('gateway', 'rangine');
+  $config = $gateway['configuration'];
+  if ($command == 'sendmsg') {
+  drupal_write_record('sms_rangine', $data);
+  $msgid = $data['id'];
+  $debug= $config['sms_rangine_debug'];
+	$param = array
+					(
+						'uname'=>$config['sms_rangine_user'],
+						'pass'=>$config['sms_rangine_password'],
+						'from'=> $config['sms_rangine_sender'],
+						'message'=>$data['message'],
+						'to'=>json_encode($data['number']),
+						'op'=>'send'
+					);
+
+	$url = SMS_RANGINE_DEFAULT_IP."/services.jspd";
+			
+	if(!$debug){ 
+	$handler = curl_init($url);             
+		curl_setopt($handler, CURLOPT_CUSTOMREQUEST, "POST");
+		curl_setopt($handler, CURLOPT_POSTFIELDS, $param);                       
+		curl_setopt($handler, CURLOPT_RETURNTRANSFER, true);
+		$response2 = curl_exec($handler);
+		
+		$response2 = json_decode($response2);
+		$res_code = $response2[0];
+		$res_data = $response2[1];
+
+		if($res_code == 0){
+				watchdog('sms',"پیامک با کد %number ارسال شد:@message", array('%number' => $res_data,'@message' => $param['message']));
+				return array('status'=> TRUE);
+			} elseif($res_code == 99){
+				watchdog('sms',"درگاه پیامک غیرفعال است. با مدیریت سامانه پیامک رنگینه تماس بگیرید.",array(), WATCHDOG_WARNING);
+				drupal_set_message('درگاه پیامک غیرفعال است. پیامک ارسال نشد. با مدیریت سایت تماس بگیرید.','warning');
+				return array('status'=> FALSE);	
+			}else{
+				watchdog('sms',"اشکالی در ارسال پیامک روی داد. کد خطا: @message.",array('@message' => $res_data), WATCHDOG_WARNING);
+				drupal_set_message('اشکالی در ارسال پیامک بوجود آمده است. با مدیریت سایت تماس بگیرید.','warning');
+				return array('status'=> FALSE);
+			}
+		}else{
+			drupal_set_message('ارسال پیام:'.$param['message'].'- از شماره:'.$param['from'].' به:'.$param['to'].' - پیامک ارسال نشد چون سرویس پیامک در حالت اشکال زدایی قرار دارد یا شما ارسال پیامک را متوقف کرده اید.','warning');
+		}	
+ 
+  }elseif($command == 'sendPatternSms'){
+	$client = new SoapClient("http://37.130.202.188/class/sms/wsdlservice/server.php?wsdl");
+	$user = $config['sms_rangine_user'];
+	$pass = $config['sms_rangine_password'];
+	$fromNum = "+985000125475";
+	$toNum = array($data['number']);
+	$pattern_code = $data['pattern_code'];
+	$input_data = $data['input_data'];
+	$result = $client -> sendPatternSms($fromNum,$toNum,$user,$pass,$pattern_code,$input_data);
+	return array('status'=> TRUE);
+  } else {
+    watchdog('sms', 'Unsupported command (@command) recived', array('@command' => $command), WATCHDOG_EMERGENCY);
+    return array('status' => FALSE, 'message' => t('Unsuported Command'));
+  }
+  return false;
+}
+/**
+ * Unset carriers page because it isn't neccessary in Iran.
+ */
+function sms_rangine_menu_alter(&$item){
+	unset($item['admin/smsframework/carriers'],
+		$item['admin/smsframework/carriers/manage'],
+		$item['admin/smsframework/carriers/add'],
+		$item['admin/smsframework/carriers/%carrier'],
+		$item['admin/smsframework/carriers/delete/%carrier']
+		);
+}
+/**
+ * Force users widthout confirmation phone number to confirm that
+ */
+function sms_rangine_page_build(&$page) {
+	$default_gateway = variable_get('sms_default_gateway', 'log');
+	if($default_gateway == 'rangine'){
+		  $gateway = sms_gateways('gateway', 'rangine');
+		  $config = $gateway['configuration'];	
+		  if($config['sms_rangine_force_user_confirm']){
+			global $user;
+			$account = user_load($user->uid);
+			if($user->uid == 1){
+				if(in_array(current_path() ,array('admin/smsframework/gateways','admin/smsframework/gateways/rangine'))){
+					drupal_set_message(t('All users widthout confirmation phone number force to confirm that and see below message; To change configuration go to <a href="/admin/smsframework/gateways/rangine"> Rangine SMS Gateway configuration page</a> > Advanced Settings.'),'warning');
+					drupal_set_message(t('You need to confirm your mobile number, <a href="@mobile_url">enter the confirmation code sent to your mobile</a>.', array('@mobile_url' => url('user/' . $account->uid . '/edit/mobile'))),'warning');
+				}
+				return;
+			}
+			if($user->uid == 0) return;
+
+			if ($account->sms_user['number'] == '' ||  $account->sms_user['status'] != "2") {
+				$path = 'user/' . $user->uid . '/edit/mobile';
+				if(current_path() != $path ){
+					drupal_set_message(t('You need to confirm your mobile number, <a href="@mobile_url">enter the confirmation code sent to your mobile</a>.', array('@mobile_url' => url('user/' . $account->uid . '/edit/mobile'))),'warning');
+					$destination = current_path();
+					drupal_goto($path,array('query' => array('destination' => $destination)));
+				}  
+			} 
+		}
+	}
+}

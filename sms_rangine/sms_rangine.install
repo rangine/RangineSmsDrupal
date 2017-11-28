@@ -1,0 +1,48 @@
+<?php
+/**
+ * Rangine SMS service gateway module for Drupal SMS Framework.
+ *
+ * Developer : Hadi Mollaei(mr.hadimollaei@gmail.com) - 09191483567 - rangine.ir
+ * Copyright: All rights reserved for Rangine.ir.
+ * Created: October 2015.
+ * 
+ * @file
+ * Install, update and uninstall functions for the sms_rangine module.
+ *
+ */
+
+
+/**
+ * Implements hook_schema().
+ */
+function sms_rangine_schema() {
+  $schema['sms_rangine'] = array(
+    'description' => 'Stores messages',
+    'fields' => array(
+      'id' => array(
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'number' => array(
+        'type' => 'varchar',
+        'length' => '32',
+        'not null' => TRUE,
+      ),
+      'message' => array(
+        'type' => 'text',
+        'not null' => TRUE,
+      ),
+    ),
+    'primary key' => array('id'),
+  );
+
+  return $schema;
+}
+/**
+ * Implements hook_uninstall().
+ */
+function sms_rangine_uninstall() {
+    variable_del($variable);
+	
+}
